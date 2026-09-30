@@ -9,6 +9,7 @@ publish = false
 data-encoding = "2"
 fs2 = "0.4"
 libp2p-identity = { version = "0.2", features = ["ed25519", "peerid", "rand"] }
+serde_json = "1.0.150"
 
 [dev-dependencies]
 tempfile = "3"
