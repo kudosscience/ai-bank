@@ -27,7 +27,8 @@ bash scripts/ci/apply-tag-protection.sh
 ```
 
 The release workflow enforces the same property in CI: the `verify-tag`
-job runs `git verify-tag` on every pushed tag, so an unsigned
+job tries `git verify-tag` (OpenPGP) then
+`git -c gpg.format=ssh verify-tag` (SSH) on every pushed tag, so an unsigned
 `safety/v*` or `pause/*` tag fails the build even if the ruleset was
 never applied.
 
@@ -35,10 +36,17 @@ never applied.
 
 ```sh
 git fetch --tags
-git verify-tag safety/v0.2.0
-# GPG-signed tag: prints Good signature ... AA5AEB7313B2A916
-# SSH-signed tag (gpg.format=ssh): prints
-#   Good "git" signature for 45144290+kudosscience@users.noreply.github.com with ED25519 key SHA256:av7CIaWccVRNZkIRVrYNEHMwNZ0GbzRvweEhHZSSMHo
+# Tags may be cut with either GPG or SSH: try OpenPGP first, then SSH
+# (git verify-tag defaults to OpenPGP and rejects SSH signatures
+# without gpg.format=ssh).
+if git verify-tag safety/v0.2.0 2>/dev/null; then
+  echo "GPG-signed tag: prints Good signature ... AA5AEB7313B2A916"
+else
+  git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/trusted-keys/allowed_signers \
+    verify-tag safety/v0.2.0
+  # SSH-signed tag prints:
+  #   Good "git" signature for 45144290+kudosscience@users.noreply.github.com with ED25519 key SHA256:av7CIaWccVRNZkIRVrYNEHMwNZ0GbzRvweEhHZSSMHo
+fi
 git show safety/v0.2.0 --no-patch --format='%T %aN'
 # %T pins the tagged tree; cross-check it against the Risk Report's
 # evaluated commit and the Changelog redline in step 2.
@@ -108,9 +116,11 @@ together they re-verify offline from bundle plus trust root.
 
 `.github/workflows/safety-monitor.yml` (daily cron + manual dispatch)
 watches our signing identity for unauthorized Rekor entries via
-`scripts/ci/rekor-monitor.sh`: it queries the public Rekor log for this
-repo's builder identity and fails (opening a `safety` issue on schedule)
-if an entry appears outside a known release tag. To run the check
+`scripts/ci/rekor-monitor.sh`: it paginates through every GitHub Release,
+re-verifies each artifact's Sigstore attestation, and additionally requires
+the attested source commit to be contained in a known signed tag
+(`safety/v*`, `v*`, `pause/*`). It fails (opening a `safety` issue on schedule)
+if any attestation stops verifying or pins a commit outside a known release tag. To run the check
 locally:
 
 ```sh

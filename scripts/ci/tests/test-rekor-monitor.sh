@@ -44,5 +44,39 @@ if bash "$script" --json "$tmp/unknown.json" >/dev/null 2>&1; then echo "FAIL: u
 echo '{"abc123": {"body": {"spec": {}}}}' > "$tmp/nopin.json"
 if bash "$script" --json "$tmp/nopin.json" >/dev/null 2>&1; then echo "FAIL: unpinned entry should fail"; fail=$((fail + 1)); else pass=$((pass + 1)); fi
 
+# Fixture 5: attestation JSON pinning a tagged commit passes
+# (--check-attestation reuses the live-mode commit-pin check offline).
+if [ -n "${known_sha:-}" ]; then
+  python3 - "$tmp/att-known.json" "$known_sha" <<'EOF'
+import json, sys
+path, sha = sys.argv[1], sys.argv[2]
+json.dump([{"verificationResult": {"statement": {"predicate": {
+  "buildDefinition": {"resolvedDependencies": [{"digest": {"gitCommit": sha}}]}}}}}], open(path, "w"))
+EOF
+  if bash "$script" --check-attestation "$tmp/att-known.json" >/dev/null 2>&1; then pass=$((pass + 1)); else echo "FAIL: attestation pinning tagged commit should pass"; fail=$((fail + 1)); fi
+else
+  echo "SKIP: no known SHA for attestation fixture"
+fi
+
+# Fixture 6: attestation JSON pinning an unknown commit fails.
+python3 - "$tmp/att-unknown.json" <<'EOF'
+import json, sys
+json.dump([{"verificationResult": {"statement": {"predicate": {
+  "buildDefinition": {"resolvedDependencies": [{"digest": {"gitCommit": "ffffffffffffffffffffffffffffffffffffffff"}}]}}}}}], open(sys.argv[1], "w"))
+EOF
+if bash "$script" --check-attestation "$tmp/att-unknown.json" >/dev/null 2>&1; then echo "FAIL: attestation pinning unknown commit should fail"; fail=$((fail + 1)); else pass=$((pass + 1)); fi
+
+# Fixture 7: attestation JSON with no commit pin fails.
+echo '[{"verificationResult": {"statement": {"predicate": {}}}}]' > "$tmp/att-nopin.json"
+if bash "$script" --check-attestation "$tmp/att-nopin.json" >/dev/null 2>&1; then echo "FAIL: unpinned attestation should fail"; fail=$((fail + 1)); else pass=$((pass + 1)); fi
+
+# Fixture 8: live mode must paginate all releases (no fixed --limit 100).
+if grep -q -- '--limit 100' "$script"; then echo "FAIL: live mode still uses fixed --limit 100 (misses releases beyond window)"; fail=$((fail + 1)); else pass=$((pass + 1)); fi
+if grep -q -- '--paginate' "$script"; then pass=$((pass + 1)); else echo "FAIL: live mode should paginate releases"; fail=$((fail + 1)); fi
+
+# Fixture 9: live mode must enforce the known-tag commit-pin check on top
+# of `gh attestation verify` (an attestation for an untagged commit must FAIL).
+if grep -q 'check_attestation_json "$verify_out"' "$script" && grep -q -- '--format json' "$script"; then pass=$((pass + 1)); else echo "FAIL: live mode should check attestation commit pin against known tags"; fail=$((fail + 1)); fi
+
 echo "rekor-monitor self-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

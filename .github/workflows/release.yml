@@ -3,8 +3,10 @@
 #   the tag, and a docs/safety/risk-report-* must exist (ADR 0005/0006).
 # - `safety/v*` tags: policy-only check (SAFETY.md header == tag).
 # Every pushed tag matching v*, safety/v*, or pause/* must be signed —
-# the verify-tag job runs `git verify-tag` (keys in-repo at
-# docs/safety/MAINTAINER_PUBKEYS.asc), backing the tag-protection
+# the verify-tag job tries OpenPGP then SSH (`git verify-tag`, falling
+# back to `git -c gpg.format=ssh verify-tag`; keys in-repo at
+# docs/safety/MAINTAINER_PUBKEYS.asc and
+# .github/trusted-keys/allowed_signers), backing the tag-protection
 # ruleset created by scripts/ci/apply-tag-protection.sh.
 # Today there is no code, so the artifact is the docs bundle; extend the
 # artifact step with cargo binaries when the workspace lands. Attestation
@@ -58,11 +60,21 @@ jobs:
       - run: |
           # Trust the in-repo maintainer keys before verifying, so the
           # check depends on the repo, not on any server-side keyring.
+          # Tags may be cut with either GPG (MAINTAINER_PUBKEYS.asc) or
+          # SSH (trusted-keys/allowed_signers): try OpenPGP first, then
+          # SSH via gpg.format=ssh (verify-tag defaults to OpenPGP and
+          # rejects SSH signatures without it).
           gpg --import docs/safety/MAINTAINER_PUBKEYS.asc 2>/dev/null || true
           git config gpg.ssh.allowedSignersFile .github/trusted-keys/allowed_signers || true
           tag="${GITHUB_REF_NAME}"
           case "$tag" in
-            safety/*|pause/*|v*) git verify-tag "$tag" ;;
+            safety/*|pause/*|v*)
+              if git verify-tag "$tag" 2>/dev/null; then
+                echo "verify-tag: $tag GPG signature OK"
+              else
+                git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=.github/trusted-keys/allowed_signers verify-tag "$tag"
+              fi
+              ;;
             *) echo "verify-tag: ref $tag is not a release tag (nothing to verify)" ;;
           esac
 
