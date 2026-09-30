@@ -29,6 +29,29 @@ enum Commands {
         /// Export text from `clawbank export`; reads stdin when omitted.
         export: Option<String>,
     },
+    /// Local petname address book: human-readable aliases for known PeerIds.
+    ///
+    /// Aliases are per-node local state only (peers.json inside the data
+    /// directory): never broadcast, replicated, or trusted from the
+    /// network. The full PeerId is always shown beside the alias, and no
+    /// command accepts an alias where a PeerId is required.
+    Peer {
+        #[command(subcommand)]
+        action: PeerCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum PeerCommands {
+    /// Store (or update) the local alias for a PeerId.
+    Add {
+        /// Canonical PeerId (base58 `12D3Koo…` or CID `bafz…`); an alias is rejected.
+        peer_id: String,
+        /// Human-readable alias (1-64 chars, no surrounding whitespace, never a PeerId).
+        alias: String,
+    },
+    /// Show every known peer as `alias (short PeerId) full-PeerId`.
+    List,
 }
 
 fn print_peer_id(keypair: &clawbank_identity::Keypair) {
@@ -86,6 +109,39 @@ fn read_bounded_stdin() -> std::io::Result<String> {
     Ok(buf)
 }
 
+fn run_peer_add(peer_id: &str, alias: &str) -> std::io::Result<()> {
+    // Strict PeerId parsing: an alias never substitutes for identity.
+    let id = clawbank_identity::parse_peer_id(peer_id)?;
+    clawbank_identity::set_alias(&clawbank_identity::peers_file()?, &id, alias)?;
+    // The alias is echoed only beside its PeerId, never alone.
+    println!(
+        "{} {}",
+        clawbank_identity::display_peer(Some(alias), &id),
+        clawbank_identity::peer_id_base58(&id)
+    );
+    Ok(())
+}
+
+fn run_peer_list() -> std::io::Result<()> {
+    let mut book: Vec<_> = clawbank_identity::aliases(&clawbank_identity::peers_file()?)?
+        .into_iter()
+        .collect();
+    // Stable, human-friendly order: alias first, then identity.
+    book.sort_by(|a, b| {
+        a.1.cmp(&b.1).then_with(|| {
+            clawbank_identity::peer_id_base58(&a.0).cmp(&clawbank_identity::peer_id_base58(&b.0))
+        })
+    });
+    for (id, alias) in &book {
+        println!(
+            "{} {}",
+            clawbank_identity::display_peer(Some(alias), id),
+            clawbank_identity::peer_id_base58(id)
+        );
+    }
+    Ok(())
+}
+
 fn run() -> std::io::Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -97,6 +153,10 @@ fn run() -> std::io::Result<()> {
         }
         Commands::Export => run_export(),
         Commands::Import { export } => run_import(export),
+        Commands::Peer { action } => match action {
+            PeerCommands::Add { peer_id, alias } => run_peer_add(&peer_id, &alias),
+            PeerCommands::List => run_peer_list(),
+        },
     }
 }
 

@@ -1,0 +1,49 @@
+# Safety monitor: watches our Sigstore signing identity for unauthorized entries.
+# Daily cron plus manual dispatch. Fails (and files a `safety` issue) when
+# any release attestation stops verifying or a Rekor entry pins a commit
+# no known tag contains. See docs/safety/verify-runbook.md §5 and
+# scripts/ci/rekor-monitor.sh. Reachability gaps warn, never fail.
+
+name: Safety monitor
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    name: rekor-monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          # Full history: git tag --contains needs the ancestry walk, and a
+          # shallow checkout has tag objects without that history.
+          fetch-depth: 0
+          # The monitor never pushes; don't persist credentials.
+          persist-credentials: false
+      - run: bash scripts/ci/rekor-monitor.sh
+
+  file-issue:
+    name: file-issue
+    needs: monitor
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          gh issue create --repo kudosscience/clawbank \
+            --label safety \
+            --title "Safety monitor: unauthorized signing entry or failed attestation $(date -u +%F)" \
+            --body "The scheduled Sigstore/Rekor monitor failed. See the failing run, then follow docs/safety/verify-runbook.md §5. Do not cut new tags until the entry is explained."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

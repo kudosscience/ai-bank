@@ -463,10 +463,12 @@ with the external check arriving exactly where the level rises.
   marked (`[REDACTED — category — N tokens withheld]`), never
   silent — per [ADR-0005](docs/adr/0005-safety-doc-pattern.md) and
   [risk-reports.md](docs/safety/risk-reports.md). Auditability is
-  git plus Sigstore/Rekor (signing, tags, and attestation land in
-  Docs 03, [#40](https://github.com/kudosscience/clawbank/issues/40)):
-  signed `safety/v*` tags with `git verify-tag`, redline diffs with
-  compare URLs in the Changelog, and per-release provenance bundles.
+  git plus Sigstore/Rekor: signed `safety/v*` tags with `git
+  verify-tag` (keys in-repo at
+  [MAINTAINER_PUBKEYS.asc](docs/safety/MAINTAINER_PUBKEYS.asc)),
+  redline diffs with compare URLs in the Changelog, and per-release
+  provenance bundles — end to end in
+  [verify-runbook.md](docs/safety/verify-runbook.md).
   Full governance text:
   [safety case §7](docs/safety/mvp-safety-case.md#7-governance-and-non-retaliation).
   Per-release cadence, sign-off, and redaction rules:
@@ -640,8 +642,7 @@ reason; an unchecked box blocks the release.
 - [ ] Versioning and redline: `Version:` header equals the tag being
   cut (`release-gate.sh safety` green); Changelog row added newest
   first with diff + compare URL; `git verify-tag` passes on the
-  safety tag (tag mechanics land in Docs 03, but the redline is
-  checkable today).
+  safety tag (procedure: [verify-runbook.md](docs/safety/verify-runbook.md)).
 - [ ] Imports, not copies: FAL definitions still owned by ADR-0004,
   domain terms by `CONTEXT.md`, argument by the safety case, harness
   by ADR-0006, cadence by `risk-reports.md` — this file points at

@@ -37,3 +37,11 @@ pub fn data_dir() -> io::Result<PathBuf> {
 pub fn identity_file() -> io::Result<PathBuf> {
     data_dir().map(|dir| dir.join("identity.key"))
 }
+
+/// The local petname address book inside [`data_dir`].
+///
+/// Plain JSON, never leaves the machine: aliases are per-node local state
+/// only, never broadcast, replicated, or trusted from the network.
+pub fn peers_file() -> io::Result<PathBuf> {
+    data_dir().map(|dir| dir.join("peers.json"))
+}
