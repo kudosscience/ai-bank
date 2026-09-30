@@ -78,5 +78,10 @@ if grep -q -- '--paginate' "$script"; then pass=$((pass + 1)); else echo "FAIL: 
 # of `gh attestation verify` (an attestation for an untagged commit must FAIL).
 if grep -q 'check_attestation_json "$verify_out"' "$script" && grep -q -- '--format json' "$script"; then pass=$((pass + 1)); else echo "FAIL: live mode should check attestation commit pin against known tags"; fail=$((fail + 1)); fi
 
+# Fixture 10: a failed release query must not report PASS. The tags query
+# must check the exit status separately (reachability gap warning, exit 0)
+# instead of swallowing errors with `|| true` into the empty-list PASS.
+if grep -q 'if ! tags=' "$script"; then pass=$((pass + 1)); else echo "FAIL: live mode should distinguish release-query failure from empty list"; fail=$((fail + 1)); fi
+
 echo "rekor-monitor self-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

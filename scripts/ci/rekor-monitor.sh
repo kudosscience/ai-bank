@@ -163,7 +163,12 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 # Paginate through all releases: a fixed --limit window would silently
 # omit older releases from attestation verification.
-tags="$(gh api --paginate "repos/$REPO/releases?per_page=100" --jq '.[].tag_name' 2>/dev/null || true)"
+# A failed query is a reachability gap (warn, exit 0), distinct from an
+# actually-empty release list (PASS): never collapse errors into PASS.
+if ! tags="$(gh api --paginate "repos/$REPO/releases?per_page=100" --jq '.[].tag_name' 2>/dev/null)"; then
+  echo "rekor-monitor: cannot list releases (reachability gap, not a forgery signal)"
+  exit 0
+fi
 if [ -z "$tags" ]; then
   echo "rekor-monitor: no releases published yet — nothing to cross-check (PASS)"
   exit 0
