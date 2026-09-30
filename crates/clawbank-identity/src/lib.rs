@@ -10,11 +10,13 @@ mod fs_secure;
 mod paths;
 mod peer;
 mod petname;
+mod sign;
 
-pub use libp2p_identity::Keypair;
+pub use libp2p_identity::{Keypair, PeerId, PublicKey};
 pub use paths::{data_dir, identity_file, peers_file};
 pub use peer::{peer_id, peer_id_base58, peer_id_cid, peer_id_from_cid};
 pub use petname::{aliases, display_peer, parse_peer_id, set_alias, short_peer_id, validate_alias};
+pub use sign::{sign, sign_with_domain, signing_bytes, verify, verify_with_domain, BANK_DOMAIN};
 
 use fs_secure::{ensure_parent_dir, needs_perm_repair, sibling_path, write_secure};
 use std::fs;
