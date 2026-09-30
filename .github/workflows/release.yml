@@ -14,7 +14,9 @@
 # `gh attestation verify <file> --repo kudosscience/clawbank`, fully
 # offline with bundle plus trust root per docs/safety/verify-runbook.md.
 # The hygiene job fails the release if the bundle holds anything but
-# digests plus summaries (no IPs, multiaddrs, or key material, ADR 0005).
+# digests plus summaries (no IPs, multiaddrs, or key material, ADR 0005),
+# scanning extracted .tar.gz members as well as loose files (gzip hides
+# member bytes from direct grep) and failing closed on unreadable archives.
 
 name: Release
 

@@ -23,6 +23,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-tags: true
+          # Full history: git tag --contains needs the ancestry walk, and a
+          # shallow checkout has tag objects without that history.
+          fetch-depth: 0
+          # The monitor never pushes; don't persist credentials.
+          persist-credentials: false
       - run: bash scripts/ci/rekor-monitor.sh
 
   file-issue:

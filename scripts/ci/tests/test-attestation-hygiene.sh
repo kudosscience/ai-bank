@@ -74,5 +74,31 @@ expect_pass "oid/version/placeholder idioms pass" "$tmp/idiom"
 mkdir -p "$tmp/realma" && printf 'relay /ip4/10.0.0.1/tcp/4001 here\n' > "$tmp/realma/note.md"
 expect_fail "real multiaddr fails" "$tmp/realma"
 
+# DNS-based multiaddr variants with real addresses are peer locators too
+# (bare /dnsaddr placeholders stay permitted — see idiom fixture above).
+mkdir -p "$tmp/dns4" && printf 'relay /dns4/peer.example.com/tcp/4001 here\n' > "$tmp/dns4/note.md"
+expect_fail "dns4 multiaddr fails" "$tmp/dns4"
+
+mkdir -p "$tmp/dns6" && printf 'relay /dns6/peer.example.com/tcp/4001 here\n' > "$tmp/dns6/note.md"
+expect_fail "dns6 multiaddr fails" "$tmp/dns6"
+
+mkdir -p "$tmp/dnsaddr" && printf 'bootstrap /dnsaddr/peer.example.com/p2p/QmFoo here\n' > "$tmp/dnsaddr/note.md"
+expect_fail "dnsaddr with address fails" "$tmp/dnsaddr"
+
+# Archive members are scanned, not just the compressed bytes: forbidden
+# content inside a .tar.gz must fail even though gzip hides it from grep.
+mkdir -p "$tmp/tgzsrc" && printf 'peer at 192.168.1.10 responded\n' > "$tmp/tgzsrc/note.md"
+mkdir -p "$tmp/tgz" && tar -czf "$tmp/tgz/bundle.tar.gz" -C "$tmp/tgzsrc" note.md
+expect_fail "tarball with forbidden member fails" "$tmp/tgz"
+
+# A clean tarball passes, and a corrupt archive fails loudly (fail-closed:
+# an unscannable bundle must not silently pass the gate).
+mkdir -p "$tmp/ctgzsrc" && printf 'FAL-2 reaffirmed. No addresses here.\n' > "$tmp/ctgzsrc/note.md"
+mkdir -p "$tmp/ctgz" && tar -czf "$tmp/ctgz/bundle.tar.gz" -C "$tmp/ctgzsrc" note.md
+expect_pass "clean tarball passes" "$tmp/ctgz"
+
+mkdir -p "$tmp/badtgz" && printf 'not a gzip at all\n' > "$tmp/badtgz/bundle.tar.gz"
+expect_fail "corrupt tarball fails" "$tmp/badtgz"
+
 echo "attestation-hygiene self-test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

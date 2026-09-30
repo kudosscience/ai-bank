@@ -2,6 +2,10 @@
 # Usage: apply-tag-protection.sh [--dry-run]
 # Creates (or prints, with --dry-run) the GitHub ruleset that protects
 # the safety tag pattern: safety/v* and pause/* require signed tags.
+# No `creation` rule on purpose: creation restricts who may create matching
+# tags to bypass actors (of which this payload defines none), so it would
+# block maintainers from cutting new safety/pause tags. Update, deletion,
+# and signature requirements are what the gate needs.
 # Needs a token with admin:read/write on the repo (maintainer one-time).
 # Safe to re-run: skips creation when an equivalent ruleset already exists.
 set -euo pipefail
@@ -22,7 +26,6 @@ ruleset() {
     }
   },
   "rules": [
-    {"type": "creation"},
     {"type": "update"},
     {"type": "deletion"},
     {"type": "required_signatures"}
