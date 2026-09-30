@@ -20,8 +20,18 @@ pub const BANK_DOMAIN: &[u8] = b"/clawbank/1/";
 
 /// The exact bytes that are signed: `domain || message`.
 ///
-/// Concatenation is unambiguous here because the domain is a fixed,
-/// caller-known prefix — verifiers never parse it back out of the payload.
+/// This matches the ADR-0007 wire rule `account_vk.verify(domain + cbor, sig)`,
+/// so the framing is intentionally bare concatenation — changing it (e.g. to
+/// length-prefixing) would break ledger wire compatibility.
+///
+/// Separation holds because the verifier supplies the domain out-of-band as a
+/// fixed, caller-known prefix: a signature only verifies under the exact
+/// domain it was framed with. Different `(domain, message)` pairs can still
+/// collide to identical bytes when one domain is a prefix of another (e.g.
+/// `BANK_DOMAIN` + `b"transfer:..."` vs. `b"/clawbank/1/transfer:"` + `...`),
+/// so prefix-related domains (bank vs. ledger transfer/batch) are related
+/// contexts, not isolated ones — callers must not treat them as such.
+/// Domains must be non-empty; see [`sign_with_domain`]/[`verify_with_domain`].
 pub fn signing_bytes(domain: &[u8], message: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(domain.len() + message.len());
     out.extend_from_slice(domain);
@@ -38,7 +48,14 @@ pub fn sign(keypair: &Keypair, message: &[u8]) -> Vec<u8> {
 ///
 /// Shaped for direct reuse by ledger transfer/batch signing: those callers
 /// pass their own domain constant instead of [`BANK_DOMAIN`].
+///
+/// # Panics
+///
+/// Panics when `domain` is empty. An empty domain would frame the bare
+/// message with no separation, letting raw Ed25519 signatures verify as
+/// domain-separated ones.
 pub fn sign_with_domain(keypair: &Keypair, domain: &[u8], message: &[u8]) -> Vec<u8> {
+    assert!(!domain.is_empty(), "domain must not be empty");
     let framed = signing_bytes(domain, message);
     keypair
         .sign(&framed)
@@ -57,7 +74,8 @@ pub fn verify(claimed: &PeerId, public_key: &PublicKey, message: &[u8], signatur
 /// Verify `signature` over `message` under an explicit domain.
 ///
 /// Domain mismatch fails closed: a signature framed under any other domain
-/// (including raw unsigned bytes) does not verify.
+/// (including raw unsigned bytes) does not verify. An empty `domain` fails
+/// closed (`false`) so callers cannot bypass separation with `b""`.
 pub fn verify_with_domain(
     claimed: &PeerId,
     public_key: &PublicKey,
@@ -65,6 +83,9 @@ pub fn verify_with_domain(
     message: &[u8],
     signature: &[u8],
 ) -> bool {
+    if domain.is_empty() {
+        return false;
+    }
     if PeerId::from_public_key(public_key) != *claimed {
         return false;
     }
@@ -158,5 +179,22 @@ mod tests {
     fn signing_bytes_are_domain_prefixed_message() {
         assert_eq!(signing_bytes(b"/clawbank/1/", b"abc"), b"/clawbank/1/abc");
         assert_eq!(signing_bytes(BANK_DOMAIN, b""), BANK_DOMAIN);
+    }
+
+    #[test]
+    fn empty_domain_fails_closed() {
+        let (kp, id, pk) = keypair_and_id();
+        let message = b"transfer:alice->bob:100";
+        // A raw Ed25519 signature over the bare message must not verify
+        // even when the caller passes an empty domain explicitly.
+        let raw_sig = kp.sign(message).expect("raw sign");
+        assert!(!verify_with_domain(&id, &pk, b"", message, &raw_sig));
+    }
+
+    #[test]
+    #[should_panic(expected = "domain must not be empty")]
+    fn sign_with_empty_domain_panics() {
+        let (kp, _, _) = keypair_and_id();
+        let _ = sign_with_domain(&kp, b"", b"transfer:alice->bob:100");
     }
 }
