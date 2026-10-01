@@ -36,8 +36,14 @@ pub const IDENTIFY_PROTOCOL_VERSION: &str = "clawbank/1.0.0";
 
 /// Default idle timeout: connections with no keep-alive substream stay open
 /// this long. Neither `identify` nor `ping` holds a keep-alive (ping streams
-/// call `ignore_for_keep_alive`), so the pool would otherwise close an idle
-/// connection immediately; 30s keeps it alive for the periodic ping.
+/// call `ignore_for_keep_alive` by design in `libp2p-ping 0.48`, so successful
+/// probes do not reset the idle timer — see `libp2p-swarm 0.48`
+/// `connection::compute_new_shutdown`). The pool would otherwise close an idle
+/// connection immediately; 30s keeps it alive long enough for the Phase-0
+/// smoke-test probes to run. This is a finite window, not indefinite
+/// persistence: a ping-only connection still closes after the timeout and is
+/// re-dialed on demand. Persistent keep-alive arrives with later phases
+/// (gossipsub/kad).
 pub const DEFAULT_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Headroom added to the ping interval when deriving the idle timeout, so at
@@ -47,9 +53,11 @@ pub const IDLE_TIMEOUT_BUFFER: std::time::Duration = std::time::Duration::from_s
 
 /// Derive a safe idle timeout for a given ping interval.
 ///
-/// Returns `max(DEFAULT_IDLE_TIMEOUT, interval + IDLE_TIMEOUT_BUFFER)` so a
-/// caller-supplied ping cadence of 30s or more cannot be starved by the idle
-/// closer before the next ping runs.
+/// Returns `max(DEFAULT_IDLE_TIMEOUT, interval + IDLE_TIMEOUT_BUFFER)` so the
+/// first ping at a caller-supplied cadence of 30s or more still fits inside
+/// the idle window. It does not grant indefinite persistence: ping streams are
+/// ignored for keep-alive, so the idle timer is not reset by successful
+/// probes and a ping-only connection still closes after the timeout.
 pub fn idle_timeout_for_interval(interval: std::time::Duration) -> std::time::Duration {
     std::cmp::max(
         DEFAULT_IDLE_TIMEOUT,
@@ -67,8 +75,10 @@ pub fn idle_timeout_for_interval(interval: std::time::Duration) -> std::time::Du
 /// Idle connections stay open for [`DEFAULT_IDLE_TIMEOUT`] (instead of the
 /// libp2p default of immediate close): neither `identify` nor `ping` holds a
 /// keep-alive on an otherwise idle connection, and Phase 0 needs the
-/// connection to survive long enough for the periodic ping to run. Later
-/// phases with gossipsub/kad may revisit this.
+/// connection to survive long enough for the smoke-test ping to run. This is
+/// intentionally finite — ping does not reset the idle timer by upstream
+/// design, so ping-only connections close after the timeout. Later phases
+/// with gossipsub/kad add persistent keep-alive as needed.
 ///
 /// Uses the default ping cadence (15s interval, 20s timeout), safely inside
 /// the 30s idle window.
@@ -86,8 +96,9 @@ pub fn new_swarm(keypair: &Keypair) -> Result<BankSwarm, libp2p_noise::Error> {
 /// Build a swarm with an explicit ping cadence (tests use a short interval).
 ///
 /// Same stack as [`new_swarm`]; the idle timeout is derived via
-/// [`idle_timeout_for_interval`] so the connection cannot be reaped before
-/// the next ping, no matter how long `ping_interval` is.
+/// [`idle_timeout_for_interval`] so at least the first ping fits inside the
+/// idle window, no matter how long `ping_interval` is. Does not promise
+/// indefinite liveness — see [`DEFAULT_IDLE_TIMEOUT`].
 pub fn new_swarm_with_ping(
     keypair: &Keypair,
     ping_interval: std::time::Duration,
@@ -108,8 +119,10 @@ pub fn new_swarm_with_ping(
 /// Same stack as [`new_swarm`]. Prefer [`new_swarm_with_ping`] unless you
 /// need full control: callers who supply both values directly MUST keep
 /// `idle_timeout` strictly greater than the ping interval embedded in
-/// `ping_config`, otherwise the idle closer reaps the connection before the
-/// next ping and liveness monitoring stops.
+/// `ping_config` so at least the first ping fits, otherwise the idle closer
+/// reaps the connection before it runs. Even when satisfied, the window stays
+/// finite (ping never resets the idle timer); indefinite keep-alive is a
+/// later-phase concern.
 pub fn new_swarm_with_config(
     keypair: &Keypair,
     ping_config: libp2p_ping::Config,
