@@ -23,16 +23,22 @@
 //! Identity 01-04 surface (key lifecycle, export, petnames, signing) light.
 
 mod channel;
+pub mod discovery;
 mod net;
 mod swarm;
 
 pub use channel::SecureChannel;
 pub use clawbank_identity::{Keypair, PeerId};
+pub use discovery::{
+    handle_identify_received, handle_mdns_discovered, is_server_mode as kad_is_server_mode,
+    new_kad, parse_bootstrap, routing_table_len as kad_routing_table_len, BootstrapPeer, Kad,
+};
 pub use net::{dial, listen, DialError, Listener};
 pub use swarm::{
-    idle_timeout_for_interval, new_swarm, new_swarm_with_config, new_swarm_with_ping,
-    BankBehaviour, BankBehaviourEvent, BankSwarm, DEFAULT_IDLE_TIMEOUT, IDENTIFY_PROTOCOL_VERSION,
-    IDLE_TIMEOUT_BUFFER,
+    add_bootstrap, idle_timeout_for_interval, is_server_mode, new_swarm, new_swarm_full,
+    new_swarm_with_config, new_swarm_with_ping, routing_table_len, start_bootstrap, BankBehaviour,
+    BankBehaviourEvent, BankSwarm, BootstrapError, SwarmBuildError, DEFAULT_IDLE_TIMEOUT,
+    IDENTIFY_PROTOCOL_VERSION, IDLE_TIMEOUT_BUFFER,
 };
 
 /// Build the Noise XX handshake config bound to the node identity key.

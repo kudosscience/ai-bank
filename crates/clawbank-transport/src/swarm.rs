@@ -1,24 +1,35 @@
-//! Swarm skeleton for Comms 01 (ADR-0002 Phase 0).
+//! Swarm skeleton for Comms 01 (ADR-0002 Phase 0) plus discovery for
+//! Comms 02 (Phase 1).
 //!
 //! One libp2p swarm per node on the shared Tokio runtime: TCP transport with
 //! the Identity 05 Noise XX handshake ([`noise_config`]) and Yamux
-//! multiplexing, plus `identify` and `ping` behaviours. No relay, no STUN
-//! fleet, no central server at this layer — two locally running nodes dial
-//! each other by multiaddr and observe verified [`PeerId`]s.
+//! multiplexing, plus `identify`, `ping`, Kademlia DHT in Server mode, and
+//! mDNS LAN discovery. No relay, no STUN fleet, no central server at this
+//! layer — two locally running nodes dial each other by multiaddr and
+//! observe verified [`PeerId`]s; a fresh node joins through one well-known
+//! bootstrap address and discovers the rest on its own.
 //!
-//! Later phases (kad, autonat, relay, dcutr, mdns, gossipsub, QUIC) extend
+//! Later phases (autonat, relay, dcutr, gossipsub, QUIC) extend
 //! [`BankBehaviour`]; the transport stack built here stays the shared base.
 
-use crate::{noise_config, Keypair, PeerId};
+use crate::{
+    discovery::{self, BootstrapPeer, Kad},
+    noise_config, Keypair, PeerId,
+};
 use libp2p_core::{upgrade::Version, Transport};
 use libp2p_swarm::NetworkBehaviour;
+use multiaddr::Multiaddr;
 
-/// Phase-0 node behaviour: peer identification plus liveness ping.
+/// Phase-1 node behaviour: peer identification, liveness ping, DHT routing,
+/// and LAN discovery.
 ///
 /// `identify` publishes the local public key and listen addresses so a
 /// connected peer learns our verified [`PeerId`]; `ping` keeps a health
-/// signal on every connection. Gossipsub, kad, autonat, relay, dcutr and
-/// mdns arrive in later phases.
+/// signal on every connection. `kad` is the DHT routing table (Server mode
+/// on reachable nodes); `mdns` finds LAN peers with zero configuration.
+/// Every `identify::Event::Received` MUST be fed to kad via
+/// [`discovery::handle_identify_received`] — libp2p does not auto-wire it.
+/// Gossipsub, autonat, relay, and dcutr arrive in later phases.
 #[derive(NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 pub struct BankBehaviour {
@@ -26,9 +37,13 @@ pub struct BankBehaviour {
     pub identify: libp2p_identify::Behaviour,
     /// Liveness probe on every connection.
     pub ping: libp2p_ping::Behaviour,
+    /// DHT routing table; always [`libp2p_kad::Mode::Server`] here.
+    pub kad: Kad,
+    /// LAN discovery with no manual address exchange.
+    pub mdns: libp2p_mdns::tokio::Behaviour,
 }
 
-/// A Phase-0 swarm: TCP + Noise XX + Yamux with [`BankBehaviour`].
+/// A Phase-1 swarm: TCP + Noise XX + Yamux with [`BankBehaviour`].
 pub type BankSwarm = libp2p_swarm::Swarm<BankBehaviour>;
 
 /// Identify protocol version advertised by this node.
@@ -81,11 +96,11 @@ pub fn idle_timeout_for_interval(interval: std::time::Duration) -> std::time::Du
 /// with gossipsub/kad add persistent keep-alive as needed.
 ///
 /// Uses the default ping cadence (15s interval, 20s timeout), safely inside
-/// the 30s idle window.
+/// the 30s idle window, and the default mDNS config.
 ///
 /// Returns the swarm; callers own listening (`Swarm::listen_on`) and dialing
 /// (`Swarm::dial`) on the shared Tokio runtime.
-pub fn new_swarm(keypair: &Keypair) -> Result<BankSwarm, libp2p_noise::Error> {
+pub fn new_swarm(keypair: &Keypair) -> Result<BankSwarm, SwarmBuildError> {
     new_swarm_with_ping(
         keypair,
         std::time::Duration::from_secs(15),
@@ -103,7 +118,7 @@ pub fn new_swarm_with_ping(
     keypair: &Keypair,
     ping_interval: std::time::Duration,
     ping_timeout: std::time::Duration,
-) -> Result<BankSwarm, libp2p_noise::Error> {
+) -> Result<BankSwarm, SwarmBuildError> {
     let ping_config = libp2p_ping::Config::new()
         .with_interval(ping_interval)
         .with_timeout(ping_timeout);
@@ -127,10 +142,29 @@ pub fn new_swarm_with_config(
     keypair: &Keypair,
     ping_config: libp2p_ping::Config,
     idle_timeout: std::time::Duration,
-) -> Result<BankSwarm, libp2p_noise::Error> {
+) -> Result<BankSwarm, SwarmBuildError> {
+    new_swarm_full(
+        keypair,
+        ping_config,
+        idle_timeout,
+        libp2p_mdns::Config::default(),
+    )
+}
+
+/// Build a swarm with full control over ping and mDNS (tests shorten the
+/// mDNS query interval so LAN discovery fires inside the test timeout).
+///
+/// `mdns_config.query_interval` of ~1s keeps the `mdns_discovery` test fast;
+/// production uses the default (5min) to avoid LAN chatter.
+pub fn new_swarm_full(
+    keypair: &Keypair,
+    ping_config: libp2p_ping::Config,
+    idle_timeout: std::time::Duration,
+    mdns_config: libp2p_mdns::Config,
+) -> Result<BankSwarm, SwarmBuildError> {
     let local_peer = PeerId::from(keypair.public());
     let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::new().nodelay(true));
-    let noise = noise_config(keypair)?;
+    let noise = noise_config(keypair).map_err(|e| SwarmBuildError::Noise(e.to_string()))?;
     // Yamux 0.14.x via libp2p-yamux 0.48 (lockfile pins yamux 0.14.1,
     // which contains the CVE-2026-32314 Data-frame panic fix first
     // shipped in 0.13.10). The vulnerable yamux 0.12.1 shim vendored by
@@ -148,6 +182,9 @@ pub fn new_swarm_with_config(
     let behaviour = BankBehaviour {
         identify: libp2p_identify::Behaviour::new(identify_cfg),
         ping: libp2p_ping::Behaviour::new(ping_config),
+        kad: discovery::new_kad(local_peer),
+        mdns: libp2p_mdns::tokio::Behaviour::new(mdns_config, local_peer)
+            .map_err(SwarmBuildError::Mdns)?,
     };
     Ok(BankSwarm::new(
         transport,
@@ -156,6 +193,104 @@ pub fn new_swarm_with_config(
         libp2p_swarm::Config::with_tokio_executor().with_idle_connection_timeout(idle_timeout),
     ))
 }
+
+/// Failure to build a [`BankSwarm`]: Noise key material or mDNS sockets.
+#[derive(Debug)]
+pub enum SwarmBuildError {
+    /// The Noise XX config rejected the node keypair.
+    Noise(String),
+    /// mDNS could not watch interfaces / bind its UDP socket.
+    Mdns(std::io::Error),
+}
+
+impl std::fmt::Display for SwarmBuildError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SwarmBuildError::Noise(detail) => write!(f, "swarm noise config failed: {detail}"),
+            SwarmBuildError::Mdns(e) => write!(f, "swarm mdns init failed: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for SwarmBuildError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SwarmBuildError::Noise(_) => None,
+            SwarmBuildError::Mdns(e) => Some(e),
+        }
+    }
+}
+
+/// Add a well-known bootstrap peer: feed its address to kad and dial it.
+///
+/// The address is a rendezvous hint, not an authority — after this single
+/// dial the node discovers the rest of the DHT on its own (identify→kad
+/// wiring plus `kad.bootstrap`). Returns the parsed peer for callers that
+/// need to wait for the connection / routing-table entry.
+pub fn add_bootstrap(
+    swarm: &mut BankSwarm,
+    bootstrap: &Multiaddr,
+) -> Result<BootstrapPeer, BootstrapError> {
+    let parsed = discovery::parse_bootstrap(bootstrap).ok_or(BootstrapError::MissingPeerId)?;
+    swarm
+        .behaviour_mut()
+        .kad
+        .add_address(&parsed.peer_id, parsed.address.clone());
+    swarm
+        .dial(parsed.full.clone())
+        .map_err(BootstrapError::dial)?;
+    Ok(parsed)
+}
+
+/// Start a Kademlia bootstrap query against the peers added so far.
+///
+/// Call after [`add_bootstrap`] (and after the identify→kad wiring has run
+/// for the dialed peer). Succeeds once at least one known peer exists;
+/// with zero known peers libp2p returns `NoKnownPeers` — callers must add
+/// the bootstrap address first.
+pub fn start_bootstrap(
+    swarm: &mut BankSwarm,
+) -> Result<libp2p_kad::QueryId, libp2p_kad::NoKnownPeers> {
+    swarm.behaviour_mut().kad.bootstrap()
+}
+
+/// Number of peers in this swarm's Kademlia routing table.
+pub fn routing_table_len(swarm: &mut BankSwarm) -> usize {
+    discovery::routing_table_len(&mut swarm.behaviour_mut().kad)
+}
+
+/// True when this swarm's kad runs in Server mode (must always hold).
+pub fn is_server_mode(swarm: &BankSwarm) -> bool {
+    discovery::is_server_mode(&swarm.behaviour().kad)
+}
+
+/// Bootstrap failure: unparsable well-known address or dial rejection.
+#[derive(Debug)]
+pub enum BootstrapError {
+    /// The multiaddr carried no `/p2p` identity — not a usable bootstrap.
+    MissingPeerId,
+    /// `Swarm::dial` rejected the address (e.g. bad transport / unknown).
+    Dial(String),
+}
+
+impl BootstrapError {
+    fn dial(e: impl std::fmt::Display) -> Self {
+        BootstrapError::Dial(e.to_string())
+    }
+}
+
+impl std::fmt::Display for BootstrapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BootstrapError::MissingPeerId => {
+                write!(f, "bootstrap multiaddr has no /p2p peer id")
+            }
+            BootstrapError::Dial(detail) => write!(f, "bootstrap dial failed: {detail}"),
+        }
+    }
+}
+
+impl std::error::Error for BootstrapError {}
 
 #[cfg(test)]
 mod tests {
