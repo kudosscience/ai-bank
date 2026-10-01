@@ -109,6 +109,8 @@ async fn dial_rejects_mismatched_peer_id_before_app_data_flows() {
 
     // The server completes the Noise handshake, then waits for application
     // bytes it must never receive: the dialer aborts first.
+    // A single `read` (not `read_exact`) proves no bytes arrived: any
+    // partial frame returns `Ok(n > 0)` immediately instead of timing out.
     let accept = tokio::spawn(async move {
         let mut server = tokio::time::timeout(TIMEOUT, listener.accept())
             .await
@@ -116,7 +118,7 @@ async fn dial_rejects_mismatched_peer_id_before_app_data_flows() {
             .expect("Noise handshake itself succeeds; rejection happens after");
         assert_eq!(server.remote_peer(), client_id);
         let mut buf = [0u8; 8];
-        tokio::time::timeout(Duration::from_secs(2), server.read_exact(&mut buf)).await
+        tokio::time::timeout(Duration::from_secs(2), server.read(&mut buf)).await
     });
 
     let err = tokio::time::timeout(TIMEOUT, dial(&client_keys, addr, &wrong_expected))
@@ -132,11 +134,15 @@ async fn dial_rejects_mismatched_peer_id_before_app_data_flows() {
     }
 
     // The server saw the connection close without any application bytes:
-    // either an EOF-shaped read error or the read timeout elapsed.
+    // timeout (no bytes), EOF (`Ok(0)`), or reset/error. Any `Ok(n > 0)`
+    // means a partial or full frame leaked after rejection.
     let read_outcome = accept.await.expect("accept task must not panic");
     match read_outcome {
         Err(_) => {}     // Elapsed: no bytes arrived before the deadline.
         Ok(Err(_)) => {} // EOF / reset: closed before any application data.
-        Ok(Ok(())) => panic!("server must not receive application bytes after a rejected dial"),
+        Ok(Ok(0)) => {}  // Clean EOF: closed with zero application bytes.
+        Ok(Ok(n)) => {
+            panic!("server must not receive application bytes after a rejected dial, got {n} bytes")
+        }
     }
 }
