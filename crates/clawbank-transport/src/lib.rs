@@ -29,7 +29,11 @@ mod swarm;
 pub use channel::SecureChannel;
 pub use clawbank_identity::{Keypair, PeerId};
 pub use net::{dial, listen, DialError, Listener};
-pub use swarm::{new_swarm, new_swarm_with_config, new_swarm_with_ping, BankBehaviour, BankBehaviourEvent, BankSwarm, DEFAULT_IDLE_TIMEOUT, IDENTIFY_PROTOCOL_VERSION, IDLE_TIMEOUT_BUFFER, idle_timeout_for_interval};
+pub use swarm::{
+    idle_timeout_for_interval, new_swarm, new_swarm_with_config, new_swarm_with_ping,
+    BankBehaviour, BankBehaviourEvent, BankSwarm, DEFAULT_IDLE_TIMEOUT, IDENTIFY_PROTOCOL_VERSION,
+    IDLE_TIMEOUT_BUFFER,
+};
 
 /// Build the Noise XX handshake config bound to the node identity key.
 ///

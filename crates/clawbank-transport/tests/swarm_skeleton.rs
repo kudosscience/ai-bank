@@ -17,7 +17,8 @@ const PING_INTERVAL: Duration = Duration::from_millis(500);
 const PING_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn is_loopback(addr: &Multiaddr) -> bool {
-    addr.iter().any(|proto| matches!(proto, Protocol::Ip4(ip) if ip.is_loopback()))
+    addr.iter()
+        .any(|proto| matches!(proto, Protocol::Ip4(ip) if ip.is_loopback()))
 }
 
 #[tokio::test]

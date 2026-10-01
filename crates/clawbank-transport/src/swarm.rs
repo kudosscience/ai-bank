@@ -96,7 +96,11 @@ pub fn new_swarm_with_ping(
     let ping_config = libp2p_ping::Config::new()
         .with_interval(ping_interval)
         .with_timeout(ping_timeout);
-    new_swarm_with_config(keypair, ping_config, idle_timeout_for_interval(ping_interval))
+    new_swarm_with_config(
+        keypair,
+        ping_config,
+        idle_timeout_for_interval(ping_interval),
+    )
 }
 
 /// Build a swarm with an explicit ping config and idle timeout.
@@ -125,11 +129,9 @@ pub fn new_swarm_with_config(
         .multiplex(yamux)
         .boxed();
 
-    let identify_cfg = libp2p_identify::Config::new(
-        IDENTIFY_PROTOCOL_VERSION.to_string(),
-        keypair.public(),
-    )
-    .with_agent_version(format!("clawbank/{}", env!("CARGO_PKG_VERSION")));
+    let identify_cfg =
+        libp2p_identify::Config::new(IDENTIFY_PROTOCOL_VERSION.to_string(), keypair.public())
+            .with_agent_version(format!("clawbank/{}", env!("CARGO_PKG_VERSION")));
     let behaviour = BankBehaviour {
         identify: libp2p_identify::Behaviour::new(identify_cfg),
         ping: libp2p_ping::Behaviour::new(ping_config),
