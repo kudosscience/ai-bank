@@ -2,7 +2,7 @@
 name = "clawbank-safety"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.88"
 publish = false
 
 [dev-dependencies]
