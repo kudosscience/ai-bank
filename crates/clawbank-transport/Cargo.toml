@@ -9,7 +9,11 @@ publish = false
 clawbank-identity = { version = "0.1.0", path = "../clawbank-identity" }
 futures = "0.3"
 libp2p-core = "0.41"
+libp2p-identify = "0.44.1"
 libp2p-noise = "0.44"
+libp2p-ping = "0.44.0"
+libp2p-swarm = { version = "0.44.1", features = ["tokio", "macros"] }
 libp2p-tcp = { version = "0.41", features = ["tokio"] }
+libp2p-yamux = "0.45.1"
 multiaddr = "0.18"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }

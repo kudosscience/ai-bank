@@ -16,18 +16,20 @@
 //! channel on mismatch — either way no application data flows to a peer
 //! that did not prove the required identity.
 //!
-//! Scope: this crate proves handshake authenticity only (Identity 05).
-//! Multiplexing (Yamux), the swarm, and application protocols arrive with
-//! Comms 01, which reuses [`noise_config`] for the shared Noise choice.
+//! Scope: Identity 05 proved handshake authenticity at the raw-channel
+//! seam; Comms 01 adds the swarm (Yamux, identify, ping) on top, reusing
+//! [`noise_config`] for the shared Noise choice.
 //! All libp2p transport dependencies stay in this crate, keeping the
 //! Identity 01-04 surface (key lifecycle, export, petnames, signing) light.
 
 mod channel;
 mod net;
+mod swarm;
 
 pub use channel::SecureChannel;
 pub use clawbank_identity::{Keypair, PeerId};
 pub use net::{dial, listen, DialError, Listener};
+pub use swarm::{new_swarm, new_swarm_with_config, BankBehaviour, BankBehaviourEvent, BankSwarm, IDENTIFY_PROTOCOL_VERSION};
 
 /// Build the Noise XX handshake config bound to the node identity key.
 ///
