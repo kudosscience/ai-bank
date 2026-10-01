@@ -2,14 +2,18 @@
 name = "clawbank-transport"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.88"
 publish = false
 
 [dependencies]
 clawbank-identity = { version = "0.1.0", path = "../clawbank-identity" }
 futures = "0.3"
-libp2p-core = "0.41"
-libp2p-noise = "0.44"
-libp2p-tcp = { version = "0.41", features = ["tokio"] }
-multiaddr = "0.18"
+libp2p-core = "0.44"
+libp2p-identify = "0.48.0"
+libp2p-noise = "0.47"
+libp2p-ping = "0.48.0"
+libp2p-swarm = { version = "0.48.0", features = ["tokio", "macros"] }
+libp2p-tcp = { version = "0.45", features = ["tokio"] }
+libp2p-yamux = "0.48.0"
+multiaddr = "0.19"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }

@@ -12,9 +12,9 @@
 
 use crate::{noise_config, Keypair, PeerId, SecureChannel};
 use libp2p_core::{
-    transport::{ListenerId, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportEvent},
     upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade},
-    Transport,
+    Endpoint, Transport,
 };
 use multiaddr::{Multiaddr, Protocol};
 use std::fmt;
@@ -128,7 +128,13 @@ pub async fn dial(
     let mut transport = TcpTransport::new(libp2p_tcp::Config::new());
     let dial_addr = socket_multiaddr(addr);
     let raw: libp2p_tcp::tokio::TcpStream = transport
-        .dial(dial_addr)
+        .dial(
+            dial_addr,
+            DialOpts {
+                role: Endpoint::Dialer,
+                port_use: PortUse::New,
+            },
+        )
         .map_err(DialError::connection)?
         .await
         .map_err(DialError::connection)?;

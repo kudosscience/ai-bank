@@ -16,6 +16,8 @@ highlight = "all"
 # ISC allowed for Identity 05: ring (Apache-2.0 AND ISC) and untrusted (ISC)
 # arrive via snow <- libp2p-noise, the ADR-0001 Noise XX handshake. ISC is
 # OSI-approved permissive, equivalent in spirit to the MIT/BSD entries above.
+# Zlib allowed for Comms 01: foldhash (Zlib) arrives via
+# lru <- libp2p-swarm/libp2p-identify. Zlib is OSI-approved permissive.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -23,6 +25,7 @@ allow = [
     "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",
+    "Zlib",
 ]
 confidence-threshold = 0.8
 
