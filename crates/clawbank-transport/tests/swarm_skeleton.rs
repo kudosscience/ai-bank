@@ -5,7 +5,7 @@
 //! infrastructure.
 
 use clawbank_identity::{generate, peer_id};
-use clawbank_transport::{new_swarm_with_config, BankBehaviourEvent};
+use clawbank_transport::{new_swarm_with_ping, BankBehaviourEvent};
 use futures::StreamExt;
 use libp2p_swarm::SwarmEvent;
 use multiaddr::{Multiaddr, Protocol};
@@ -13,11 +13,11 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(20);
+const PING_INTERVAL: Duration = Duration::from_millis(500);
+const PING_TIMEOUT: Duration = Duration::from_secs(5);
 
-fn fast_ping() -> libp2p_ping::Config {
-    libp2p_ping::Config::new()
-        .with_interval(Duration::from_millis(500))
-        .with_timeout(Duration::from_secs(5))
+fn is_loopback(addr: &Multiaddr) -> bool {
+    addr.iter().any(|proto| matches!(proto, Protocol::Ip4(ip) if ip.is_loopback()))
 }
 
 #[tokio::test]
@@ -28,8 +28,10 @@ async fn two_local_nodes_identify_and_ping_over_encrypted_swarm() {
     let id_b = peer_id(&key_b);
     assert_ne!(id_a, id_b);
 
-    let mut swarm_a = new_swarm_with_config(&key_a, fast_ping()).expect("swarm A builds");
-    let mut swarm_b = new_swarm_with_config(&key_b, fast_ping()).expect("swarm B builds");
+    let mut swarm_a =
+        new_swarm_with_ping(&key_a, PING_INTERVAL, PING_TIMEOUT).expect("swarm A builds");
+    let mut swarm_b =
+        new_swarm_with_ping(&key_b, PING_INTERVAL, PING_TIMEOUT).expect("swarm B builds");
     assert_eq!(*swarm_a.local_peer_id(), id_a);
     assert_eq!(*swarm_b.local_peer_id(), id_b);
 
@@ -100,7 +102,14 @@ async fn two_local_nodes_identify_and_ping_over_encrypted_swarm() {
                         libp2p_identify::Event::Received { peer_id, info, .. },
                     )) if peer_id == id_b => {
                         a_saw_b_via_identify = true;
-                        if !info.listen_addrs.is_empty() {
+                        // Must report the exact loopback listener we dialed,
+                        // not just any non-empty set (catches stale/wrong addrs).
+                        if info.listen_addrs.contains(&addr_b) {
+                            assert!(
+                                info.listen_addrs.iter().all(is_loopback),
+                                "identify addrs must be loopback, got {:?}",
+                                info.listen_addrs
+                            );
                             a_saw_b_addrs = true;
                         }
                     }
@@ -119,7 +128,12 @@ async fn two_local_nodes_identify_and_ping_over_encrypted_swarm() {
                         libp2p_identify::Event::Received { peer_id, info, .. },
                     )) if peer_id == id_a => {
                         b_saw_a_via_identify = true;
-                        if !info.listen_addrs.is_empty() {
+                        if info.listen_addrs.contains(&addr_a) {
+                            assert!(
+                                info.listen_addrs.iter().all(is_loopback),
+                                "identify addrs must be loopback, got {:?}",
+                                info.listen_addrs
+                            );
                             b_saw_a_addrs = true;
                         }
                     }
