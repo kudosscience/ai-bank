@@ -75,6 +75,12 @@ impl Listener {
     /// The handshake verifies the dialer's static identity key before
     /// returning, so [`SecureChannel::remote_peer`] is authenticated —
     /// a forged identity fails here, never at the application layer.
+    ///
+    /// No internal timeout: a silent peer keeps `accept` pending until the
+    /// handshake completes or fails. Callers own the timeout and must wrap
+    /// `accept` (e.g. `tokio::time::timeout`), as the smoke tests do; a
+    /// failed handshake returns an `io::Result` error and `accept` may be
+    /// called again for the next inbound connection.
     pub async fn accept(&mut self) -> io::Result<SecureChannel> {
         loop {
             match next_event(&mut self.transport).await {
