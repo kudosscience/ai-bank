@@ -118,10 +118,14 @@ pub fn new_swarm_with_config(
     let local_peer = PeerId::from(keypair.public());
     let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::new().nodelay(true));
     let noise = noise_config(keypair)?;
-    // Default Yamux config negotiates yamux/1.0.0 (rust-yamux 0.13.x, already
-    // at 0.13.10 with the CVE-2026-32314 Data-frame panic fix); the legacy
-    // 0.12 shim in libp2p-yamux is only reached if a caller explicitly opts
-    // into the old client/server constructors, which Phase 0 never does.
+    // Default Yamux config runs rust-yamux 0.13.x (lockfile pins 0.13.10,
+    // which contains the CVE-2026-32314 Data-frame panic fix). libp2p-yamux
+    // 0.45.x still vendors a yamux 0.12.1 shim for backwards compat, but it
+    // is only constructed when a caller invokes one of the `Config::set_*`
+    // tuning setters (each switches the internal enum to the 0.12 path) —
+    // Phase 0 never calls those setters, so every connection uses the fixed
+    // 0.13 path. Dropping the 0.12 shim entirely needs libp2p-yamux 0.48+
+    // (libp2p-core 0.44, identity 0.3), tracked as follow-up outside Phase 0.
     let yamux = libp2p_yamux::Config::default();
     let transport = tcp
         .upgrade(Version::V1Lazy)
