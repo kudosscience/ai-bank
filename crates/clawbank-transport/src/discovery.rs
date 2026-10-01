@@ -10,7 +10,7 @@
 //! - [`handle_identify_received`]: the mandatory identify→kad wiring —
 //!   libp2p does not auto-wire it, so every `identify::Event::Received`
 //!   must feed `listen_addrs` into [`kad`](libp2p_kad::Behaviour::add_address).
-//! - [`parse_bootstrap`] / [`add_bootstrap`] / [`start_bootstrap`]: the
+//! - [`parse_bootstrap`] / [`crate::add_bootstrap`] / [`crate::start_bootstrap`]: the
 //!   well-known-address join path. The address is a rendezvous hint, not an
 //!   authority: no registry, CA, or hosted directory.
 //! - [`handle_mdns_discovered`]: LAN peers feed the same routing table.
@@ -97,9 +97,10 @@ pub fn handle_identify_received(kad: &mut Kad, peer: &PeerId, listen_addrs: &[Mu
 /// Feed mDNS LAN discoveries into the same routing table.
 ///
 /// Each `(peer, addr)` pair is added to kad; returns the count added.
-/// Callers should additionally `Swarm::dial` the peer (see
-/// [`crate::dial_mdns_peer`] helper pattern in tests) so identify runs and
-/// the connection — not just the address — is confirmed.
+/// This only feeds the routing table — it does not dial. Callers MUST
+/// `Swarm::dial` each peer (see the `kad_discovery` integration test for
+/// the pattern) so identify runs and the connection — not just the
+/// address — is confirmed.
 pub fn handle_mdns_discovered(kad: &mut Kad, discovered: &[(PeerId, Multiaddr)]) -> usize {
     discovered
         .iter()

@@ -98,7 +98,7 @@ async fn bootstrap_from_single_well_known_addr_populates_routing_table() {
             if routing_table_len(&mut swarm_a) > 0 && routing_table_len(&mut swarm_b) > 0 {
                 // Run the DHT bootstrap query once both sides know each other.
                 if !b_bootstrapped {
-                    let _ = start_bootstrap(&mut swarm_b);
+                    start_bootstrap(&mut swarm_b).expect("bootstrap query starts");
                     b_bootstrapped = true;
                 } else {
                     break;
