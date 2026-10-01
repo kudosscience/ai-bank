@@ -13,11 +13,15 @@ wildcards = "deny"
 highlight = "all"
 
 [licenses]
+# ISC allowed for Identity 05: ring (Apache-2.0 AND ISC) and untrusted (ISC)
+# arrive via snow <- libp2p-noise, the ADR-0001 Noise XX handshake. ISC is
+# OSI-approved permissive, equivalent in spirit to the MIT/BSD entries above.
 allow = [
     "MIT",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "ISC",
     "Unicode-3.0",
 ]
 confidence-threshold = 0.8
