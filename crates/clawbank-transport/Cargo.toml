@@ -8,14 +8,20 @@ publish = false
 [dependencies]
 clawbank-identity = { version = "0.1.0", path = "../clawbank-identity" }
 futures = "0.3"
+libp2p-autonat = "0.16"
 libp2p-core = "0.44"
+libp2p-dcutr = "0.15"
+libp2p-dns = { version = "0.45", features = ["tokio"] }
 libp2p-identify = "0.48.0"
 libp2p-kad = "0.49.0"
 libp2p-mdns = { version = "0.49.0", features = ["tokio"] }
 libp2p-noise = "0.47"
 libp2p-ping = "0.48.0"
+libp2p-quic = { version = "0.14", features = ["tokio"] }
+libp2p-relay = "0.22"
 libp2p-swarm = { version = "0.48.0", features = ["tokio", "macros"] }
 libp2p-tcp = { version = "0.45", features = ["tokio"] }
+libp2p-upnp = { version = "0.7", features = ["tokio"] }
 libp2p-yamux = "0.48.0"
 multiaddr = "0.19"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }
