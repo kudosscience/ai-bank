@@ -18,7 +18,7 @@ Thanks for contributing.
 cargo test --all
 ```
 
-Optional (required for `rust-check.sh audit`):
+Required for `rust-check.sh all`:
 
 ```bash
 cargo install cargo-audit --locked
