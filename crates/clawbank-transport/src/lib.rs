@@ -25,6 +25,7 @@
 mod channel;
 pub mod discovery;
 mod net;
+pub mod reachability;
 mod swarm;
 
 pub use channel::SecureChannel;
@@ -34,10 +35,19 @@ pub use discovery::{
     new_kad, parse_bootstrap, routing_table_len as kad_routing_table_len, BootstrapPeer, Kad,
 };
 pub use net::{dial, listen, DialError, Listener};
+pub use reachability::{
+    build_relay_circuit_addr, capped_relay_config, format_hole_punch_outcome, has_direct_address,
+    has_relayed_address, is_dns_address, is_quic_address, is_relay_only, is_relayed_address,
+    reachability_from_autonat, reachability_indicator, should_reserve_relay_slot,
+    HolePunchOutcome, Reachability, RelayAddrError, RelayLimits, DIRECT_INDICATOR,
+    RELAY_ONLY_INDICATOR,
+};
 pub use swarm::{
-    add_bootstrap, idle_timeout_for_interval, is_server_mode, new_swarm, new_swarm_full,
-    new_swarm_with_config, new_swarm_with_ping, routing_table_len, start_bootstrap, BankBehaviour,
-    BankBehaviourEvent, BankSwarm, BootstrapError, SwarmBuildError, DEFAULT_IDLE_TIMEOUT,
+    add_bootstrap, autonat_reachability, enable_relay_server, format_dcutr_event,
+    hole_punch_outcome, idle_timeout_for_interval, is_server_mode, new_swarm, new_swarm_full,
+    new_swarm_with_config, new_swarm_with_ping, relay_circuit_dial_addr, reserve_relay_slot,
+    routing_table_len, start_bootstrap, BankBehaviour, BankBehaviourEvent, BankSwarm,
+    BootstrapError, RelayReserveError, SwarmBuildError, DEFAULT_IDLE_TIMEOUT,
     IDENTIFY_PROTOCOL_VERSION, IDLE_TIMEOUT_BUFFER,
 };
 
