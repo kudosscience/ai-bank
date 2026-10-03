@@ -4,8 +4,8 @@ Thanks for contributing.
 
 ## Before you start
 
-- Read `/home/runner/work/clawbank/clawbank/CONTEXT.md` for domain vocabulary.
-- Read relevant ADRs in `/home/runner/work/clawbank/clawbank/docs/adr` before changing architecture.
+- Read `CONTEXT.md` for domain vocabulary.
+- Read relevant ADRs in `docs/adr` before changing architecture.
 - Search existing issues before opening a new one.
 
 ## Development setup
